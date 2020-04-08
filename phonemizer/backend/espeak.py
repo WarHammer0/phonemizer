@@ -288,7 +288,22 @@ class EspeakBackend(BaseBackend):
                 # [['this', 'DIs'], [' is', 'Iz'], [' to be', 't@bi']]
                 temp_text_word_to_phoneme_word_mapping = []
                 if mappings is not None:
-                    temp_text_word_to_phoneme_word_mapping = [mapping.split('~|||~') for mapping in mappings]
+                    for mapping in mappings:
+                        text_and_phoneme = mapping.split('~|||~')
+
+                        # Sometimes text words map to multiple phoneme words. Like "lunchroom" ~> "l'VntS ru:m"
+                        # This comes out in the following shape; lunchroom~|||~lVntS||ru:m~|~|~l'VntS ru:m
+                        # Without handling it, text_and_phoneme would be equal to the following:
+                        # ["lunchroom", "lVntS||ru:m"]
+                        # This should be fixed to be in the form of [["lunchroom", "lVntS ru:m"]]
+                        #
+                        # There is also another case where multiple words will map to multiple phonemes
+                        # such as, "a while" ~> "ɐ wˈaɪl". This comes out in the following shape; a while~|||~a#||waIl~|~|~ɐ wˈaɪl
+                        # without handling it, text and phonemes would be equal to the following:
+                        # ["a while", "a#||waIl"]. THis should be fixed to be in the form of ["a while", "a# waIl"]
+
+                        text_and_phoneme[1] = text_and_phoneme[1].replace("||", " ")
+                        temp_text_word_to_phoneme_word_mapping.append(text_and_phoneme)
 
                 # Append the mappings to the array:
                 text_word_to_phoneme_word_mapping.append(temp_text_word_to_phoneme_word_mapping)

@@ -301,8 +301,9 @@ class EspeakBackend(BaseBackend):
                         # such as, "a while" ~> "ɐ wˈaɪl". This comes out in the following shape; a while~|||~a#||waIl~|~|~ɐ wˈaɪl
                         # without handling it, text and phonemes would be equal to the following:
                         # ["a while", "a#||waIl"]. THis should be fixed to be in the form of ["a while", "a# waIl"]
-
+                        
                         text_and_phoneme[1] = text_and_phoneme[1].replace("||", " ")
+
                         temp_text_word_to_phoneme_word_mapping.append(text_and_phoneme)
 
                 # Append the mappings to the array:

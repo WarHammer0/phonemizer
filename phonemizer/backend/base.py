@@ -102,7 +102,7 @@ class BaseBackend(object):
 
         if njobs == 1:
             # phonemize the text forced as a string
-            text = self._phonemize_aux(list2str(text), separator, strip)
+            text, text_word_to_phoneme_word_mapping = self._phonemize_aux(list2str(text), separator, strip)
         else:
             # If using parallel jobs, disable the log as stderr is not
             # picklable.
@@ -111,12 +111,13 @@ class BaseBackend(object):
             self.logger = None
 
             # we have here a list of phonemized chunks
-            text = joblib.Parallel(n_jobs=njobs)(
+            text, text_word_to_phoneme_word_mapping= joblib.Parallel(n_jobs=njobs)(
                 joblib.delayed(self._phonemize_aux)(t, separator, strip)
                 for t in chunks(text, njobs))
 
             # flatten them in a single list
             text = list(itertools.chain(*text))
+            text_word_to_phoneme_word_mapping = list(itertools.chain(*text_word_to_phoneme_word_mapping))
 
             # restore the log as it was before parallel processing
             self.logger = log_storage
@@ -128,7 +129,7 @@ class BaseBackend(object):
         # output the result formatted as a string or a list of strings
         # according to type(text)
         return (list2str(text) if text_type in six.string_types
-                else str2list(text))
+                else str2list(text)), text_word_to_phoneme_word_mapping
 
     @abc.abstractmethod
     def _phonemize_aux(self, text, separator, strip):

@@ -132,4 +132,4 @@ class SegmentsBackend(BaseBackend):
         phonemized = (p.replace('#', separator.word) for p in phonemized)
 
         # return the result as a list of utterances
-        return list(phonemized)
+        return list(phonemized), []

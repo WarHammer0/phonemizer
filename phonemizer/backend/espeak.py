@@ -37,7 +37,7 @@ _ESPEAK_FLAGS_RE = re.compile(r'\(.+?\)')
 # a global variable being used to overload the default espeak installed on the
 # system. The user can choose an alternative espeak with the method
 # EspeakBackend.set_espeak_path().
-_ESPEAK_DEFAULT_PATH = None
+_ESPEAK_DEFAULT_PATH = '/Users/tedi/resemble/espeak-ng/yolo/bin/espeak-ng'
 
 
 class EspeakBackend(BaseBackend):
@@ -106,6 +106,9 @@ class EspeakBackend(BaseBackend):
     @staticmethod
     @lru_cache(maxsize=None)
     def espeak_path():
+        if _ESPEAK_DEFAULT_PATH:
+            return _ESPEAK_DEFAULT_PATH
+
         if 'PHONEMIZER_ESPEAK_PATH' in os.environ:
             espeak = os.environ['PHONEMIZER_ESPEAK_PATH']
             if not (os.path.isfile(espeak) and os.access(espeak, os.X_OK)):
@@ -113,9 +116,6 @@ class EspeakBackend(BaseBackend):
                     f'PHONEMIZER_ESPEAK_PATH={espeak} '
                     f'is not an executable file')
             return os.path.abspath(espeak)
-
-        if _ESPEAK_DEFAULT_PATH:
-            return _ESPEAK_DEFAULT_PATH
 
         espeak = distutils.spawn.find_executable('espeak-ng')
         if not espeak:  # pragma: nocover
@@ -227,6 +227,7 @@ class EspeakBackend(BaseBackend):
 
     def _phonemize_aux(self, text, separator, strip):
         output = []
+        text_word_to_phoneme_word_mapping = [];
         for n, line in enumerate(text.split('\n'), start=1):
             with tempfile.NamedTemporaryFile('w+', delete=False) as data:
                 try:
@@ -238,9 +239,11 @@ class EspeakBackend(BaseBackend):
                     data.close()
 
                     # generate the espeak command to run
-                    command = '{} -v{} {} -q -f {} {}'.format(
+                    command = '{} -v{} {} -q -X -f {} {}'.format(
                         self.espeak_path(), self.language, self.ipa,
                         data.name, self.sep)
+
+                    print("command: " + command)
 
                     if self.logger:
                         self.logger.debug('running %s', command)
@@ -263,6 +266,32 @@ class EspeakBackend(BaseBackend):
                 line = self._process_lang_switch(n, line)
                 if not line:
                     continue
+
+                # Newly added -X flag will make espeak-ng output word to phoneme word mappings, the output
+                # will be as follows: 'this~|||~DIs~|~|~ is~|||~Iz~|~|~ to be~|||~t@bi~|~|~ ðɪs ɪz ɐ təbi tɛst .'
+                # Word(s) mappings are delimited by ~|~|~. Original text to phonemized texts are delimited by ~|||~
+                mappings_and_phonemized_text = line.split('~|~|~')
+
+                # Set the line variable to the phonemized text only, which will always be the last index in the
+                # split string. Mappings always come before phonemized text.
+                line = mappings_and_phonemized_text[-1]
+
+                # Mappings are every index except the last index (phonemized text)
+                # Not every phonemized sentence will have word mappings, in that case we set mappings to None.
+                # Only phonemized sentences with whole word phonemizations. For example, "to be" ~> "t@bi" will contain a mapping,
+                # while "test" ~> "t", "ɛ", "s", "t" will not contain a mapping as it was a character-by-character phonemization.
+                mappings = mappings_and_phonemized_text[0:-1] if len(mappings_and_phonemized_text) > 1 else None
+
+
+                # If mappings are not none, loop over each mapping and extract the text to phoneme mappings
+                # This will produce a temp_text_word_to_phoneme_word_mapping array which will look like this:
+                # [['this', 'DIs'], [' is', 'Iz'], [' to be', 't@bi']]
+                temp_text_word_to_phoneme_word_mapping = []
+                if mappings is not None:
+                    temp_text_word_to_phoneme_word_mapping = [mapping.split('~|||~') for mapping in mappings]
+
+                # Append the mappings to the array:
+                text_word_to_phoneme_word_mapping.append(temp_text_word_to_phoneme_word_mapping)
 
                 out_line = ''
                 for word in line.split(u' '):
@@ -314,4 +343,4 @@ class EspeakBackend(BaseBackend):
                         'language switch flags have been kept '
                         '(applying "keep-flags" policy)')
 
-        return output
+        return output, text_word_to_phoneme_word_mapping

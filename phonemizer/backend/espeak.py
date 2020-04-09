@@ -243,8 +243,6 @@ class EspeakBackend(BaseBackend):
                         self.espeak_path(), self.language, self.ipa,
                         data.name, self.sep)
 
-                    print("command: " + command)
-
                     if self.logger:
                         self.logger.debug('running %s', command)
 
@@ -301,8 +299,12 @@ class EspeakBackend(BaseBackend):
                         # such as, "a while" ~> "ɐ wˈaɪl". This comes out in the following shape; a while~|||~a#||waIl~|~|~ɐ wˈaɪl
                         # without handling it, text and phonemes would be equal to the following:
                         # ["a while", "a#||waIl"]. THis should be fixed to be in the form of ["a while", "a# waIl"]
-                        
                         text_and_phoneme[1] = text_and_phoneme[1].replace("||", " ")
+                        # Remove prepended and trailing spaces if they are there.
+                        if text_and_phoneme[0][0] == ' ':
+                            text_and_phoneme[0] = text_and_phoneme[0][1:]
+                        if text_and_phoneme[0][-1] == ' ':
+                            text_and_phoneme[0] = text_and_phoneme[0][0:-1]
 
                         temp_text_word_to_phoneme_word_mapping.append(text_and_phoneme)
 

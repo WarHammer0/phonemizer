@@ -41,7 +41,7 @@ def phonemize(
         use_sampa=False,
         language_switch='keep-flags',
         njobs=1,
-        logger=get_logger()):
+        logger=get_logger(), return_word_mappings=False):
     """Multilingual text to phonemes converter
 
     Return a phonemized version of an input `text`, given its
@@ -169,4 +169,4 @@ def phonemize(
 
     # phonemize the input text
     return phonemizer.phonemize(
-        text, separator=separator, strip=strip, njobs=njobs)
+        text, separator=separator, strip=strip, njobs=njobs, return_word_mappings=return_word_mappings)

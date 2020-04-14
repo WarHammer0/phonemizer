@@ -225,9 +225,56 @@ class EspeakBackend(BaseBackend):
 
         return utt
 
-    def _phonemize_aux(self, text, separator, strip):
+
+    def _process_word_to_phoneme_word_mappings(self, line):
+        # Newly added -X flag will make espeak-ng output word to phoneme word mappings, the output
+        # will be as follows: 'this~|||~DIs~|~|~ is~|||~Iz~|~|~ to be~|||~t@bi~|~|~ ðɪs ɪz ɐ təbi tɛst .'
+        # Word(s) mappings are delimited by ~|~|~. Original text to phonemized texts are delimited by ~|||~
+        mappings_and_phonemized_text = line.split('~|~|~')
+
+        # Set the line variable to the phonemized text only, which will always be the last index in the
+        # split string. Mappings always come before phonemized text.
+        line = mappings_and_phonemized_text[-1]
+
+        # Mappings are every index except the last index (phonemized text)
+        # Not every phonemized sentence will have word mappings, in that case we set mappings to None.
+        # Only phonemized sentences with whole word phonemizations. For example, "to be" ~> "t@bi" will contain a mapping,
+        # while "test" ~> "t", "ɛ", "s", "t" will not contain a mapping as it was a character-by-character phonemization.
+        mappings = mappings_and_phonemized_text[0:-1] if len(mappings_and_phonemized_text) > 1 else None
+
+        # If mappings are not none, loop over each mapping and extract the text to phoneme mappings
+        # This will produce a temp_text_word_to_phoneme_word_mapping array which will look like this:
+        # [['this', 'DIs'], [' is', 'Iz'], [' to be', 't@bi']]
+        temp_text_word_to_phoneme_word_mapping = []
+        if mappings is not None:
+            for mapping in mappings:
+                text_and_phoneme = mapping.split('~|||~')
+
+                # Sometimes text words map to multiple phoneme words. Like "lunchroom" ~> "l'VntS ru:m"
+                # This comes out in the following shape; lunchroom~|||~lVntS||ru:m~|~|~l'VntS ru:m
+                # Without handling it, text_and_phoneme would be equal to the following:
+                # ["lunchroom", "lVntS||ru:m"]
+                # This should be fixed to be in the form of [["lunchroom", "lVntS ru:m"]]
+                #
+                # There is also another case where multiple words will map to multiple phonemes
+                # such as, "a while" ~> "ɐ wˈaɪl". This comes out in the following shape; a while~|||~a#||waIl~|~|~ɐ wˈaɪl
+                # without handling it, text and phonemes would be equal to the following:
+                # ["a while", "a#||waIl"]. THis should be fixed to be in the form of ["a while", "a# waIl"]
+                text_and_phoneme[1] = text_and_phoneme[1].replace("||", " ")
+                # Remove prepended and trailing spaces if they are there.
+                if text_and_phoneme[0][0] == ' ':
+                    text_and_phoneme[0] = text_and_phoneme[0][1:]
+                if text_and_phoneme[0][-1] == ' ':
+                    text_and_phoneme[0] = text_and_phoneme[0][0:-1]
+
+                temp_text_word_to_phoneme_word_mapping.append(text_and_phoneme)
+
+        # Append the mappings to the array:
+        return line, temp_text_word_to_phoneme_word_mapping
+
+    def _phonemize_aux(self, text, separator, strip, return_word_mappings):
         output = []
-        text_word_to_phoneme_word_mapping = [];
+        text_word_to_phoneme_word_mapping = []
         for n, line in enumerate(text.split('\n'), start=1):
             with tempfile.NamedTemporaryFile('w+', delete=False) as data:
                 try:
@@ -239,10 +286,15 @@ class EspeakBackend(BaseBackend):
                     data.close()
 
                     # generate the espeak command to run
-                    command = '{} -v{} {} -q -X -f {} {}'.format(
+                    command = '{} -v{} {} -q -f {} {}'.format(
                         self.espeak_path(), self.language, self.ipa,
                         data.name, self.sep)
 
+                    # Append -X flag to e-speak.
+                    if return_word_mappings:
+                        command += ' -X'
+
+                    print(f'Command {command}')
                     if self.logger:
                         self.logger.debug('running %s', command)
 
@@ -261,55 +313,16 @@ class EspeakBackend(BaseBackend):
                 line = re.sub(r'_+', '_', line)
                 line = re.sub(r'_ ', ' ', line)
 
+                # Process the text word to phoneme word mappings if enabled.
+                if return_word_mappings:
+                    print ('mapped')
+                    line, temp_text_word_to_phoneme_word_mapping = self._process_word_to_phoneme_word_mappings(line)
+                    text_word_to_phoneme_word_mapping.append(temp_text_word_to_phoneme_word_mapping)
+
+                # Continue with processing the the phonemized text
                 line = self._process_lang_switch(n, line)
                 if not line:
                     continue
-
-                # Newly added -X flag will make espeak-ng output word to phoneme word mappings, the output
-                # will be as follows: 'this~|||~DIs~|~|~ is~|||~Iz~|~|~ to be~|||~t@bi~|~|~ ðɪs ɪz ɐ təbi tɛst .'
-                # Word(s) mappings are delimited by ~|~|~. Original text to phonemized texts are delimited by ~|||~
-                mappings_and_phonemized_text = line.split('~|~|~')
-
-                # Set the line variable to the phonemized text only, which will always be the last index in the
-                # split string. Mappings always come before phonemized text.
-                line = mappings_and_phonemized_text[-1]
-
-                # Mappings are every index except the last index (phonemized text)
-                # Not every phonemized sentence will have word mappings, in that case we set mappings to None.
-                # Only phonemized sentences with whole word phonemizations. For example, "to be" ~> "t@bi" will contain a mapping,
-                # while "test" ~> "t", "ɛ", "s", "t" will not contain a mapping as it was a character-by-character phonemization.
-                mappings = mappings_and_phonemized_text[0:-1] if len(mappings_and_phonemized_text) > 1 else None
-
-
-                # If mappings are not none, loop over each mapping and extract the text to phoneme mappings
-                # This will produce a temp_text_word_to_phoneme_word_mapping array which will look like this:
-                # [['this', 'DIs'], [' is', 'Iz'], [' to be', 't@bi']]
-                temp_text_word_to_phoneme_word_mapping = []
-                if mappings is not None:
-                    for mapping in mappings:
-                        text_and_phoneme = mapping.split('~|||~')
-
-                        # Sometimes text words map to multiple phoneme words. Like "lunchroom" ~> "l'VntS ru:m"
-                        # This comes out in the following shape; lunchroom~|||~lVntS||ru:m~|~|~l'VntS ru:m
-                        # Without handling it, text_and_phoneme would be equal to the following:
-                        # ["lunchroom", "lVntS||ru:m"]
-                        # This should be fixed to be in the form of [["lunchroom", "lVntS ru:m"]]
-                        #
-                        # There is also another case where multiple words will map to multiple phonemes
-                        # such as, "a while" ~> "ɐ wˈaɪl". This comes out in the following shape; a while~|||~a#||waIl~|~|~ɐ wˈaɪl
-                        # without handling it, text and phonemes would be equal to the following:
-                        # ["a while", "a#||waIl"]. THis should be fixed to be in the form of ["a while", "a# waIl"]
-                        text_and_phoneme[1] = text_and_phoneme[1].replace("||", " ")
-                        # Remove prepended and trailing spaces if they are there.
-                        if text_and_phoneme[0][0] == ' ':
-                            text_and_phoneme[0] = text_and_phoneme[0][1:]
-                        if text_and_phoneme[0][-1] == ' ':
-                            text_and_phoneme[0] = text_and_phoneme[0][0:-1]
-
-                        temp_text_word_to_phoneme_word_mapping.append(text_and_phoneme)
-
-                # Append the mappings to the array:
-                text_word_to_phoneme_word_mapping.append(temp_text_word_to_phoneme_word_mapping)
 
                 out_line = ''
                 for word in line.split(u' '):
@@ -361,4 +374,7 @@ class EspeakBackend(BaseBackend):
                         'language switch flags have been kept '
                         '(applying "keep-flags" policy)')
 
-        return output, text_word_to_phoneme_word_mapping
+        if return_word_mappings:
+            return output, text_word_to_phoneme_word_mapping
+
+        return output

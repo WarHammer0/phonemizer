@@ -87,7 +87,7 @@ class BaseBackend(object):
         return language in self.supported_languages()
 
     def phonemize(self, text, separator=default_separator,
-                  strip=False, njobs=1):
+                  strip=False, njobs=1, return_word_mappings=False):
         """Returns the `text` phonemized for the given language"""
         # remember the text type for output (either list or string)
         text_type = type(text)
@@ -102,7 +102,10 @@ class BaseBackend(object):
 
         if njobs == 1:
             # phonemize the text forced as a string
-            text, text_word_to_phoneme_word_mapping = self._phonemize_aux(list2str(text), separator, strip)
+            if return_word_mappings:
+                text, text_word_to_phoneme_word_mapping = self._phonemize_aux(list2str(text), separator, strip, return_word_mappings)
+            else:
+                text = self._phonemize_aux(list2str(text), separator, strip, return_word_mappings)
         else:
             # If using parallel jobs, disable the log as stderr is not
             # picklable.
@@ -111,13 +114,20 @@ class BaseBackend(object):
             self.logger = None
 
             # we have here a list of phonemized chunks
-            text, text_word_to_phoneme_word_mapping= joblib.Parallel(n_jobs=njobs)(
-                joblib.delayed(self._phonemize_aux)(t, separator, strip)
-                for t in chunks(text, njobs))
+            if return_word_mappings:
+                text, text_word_to_phoneme_word_mapping= joblib.Parallel(n_jobs=njobs)(
+                    joblib.delayed(self._phonemize_aux)(t, separator, strip, return_word_mappings)
+                    for t in chunks(text, njobs))
+                # flatten mappings
+                text_word_to_phoneme_word_mapping = list(itertools.chain(*text_word_to_phoneme_word_mapping))
+            else:
+                text = joblib.Parallel(n_jobs=njobs)(
+                    joblib.delayed(self._phonemize_aux)(t, separator, strip, return_word_mappings)
+                    for t in chunks(text, njobs))
 
             # flatten them in a single list
             text = list(itertools.chain(*text))
-            text_word_to_phoneme_word_mapping = list(itertools.chain(*text_word_to_phoneme_word_mapping))
+
 
             # restore the log as it was before parallel processing
             self.logger = log_storage
@@ -128,9 +138,14 @@ class BaseBackend(object):
 
         # output the result formatted as a string or a list of strings
         # according to type(text)
-        return (list2str(text) if text_type in six.string_types
-                else str2list(text)), text_word_to_phoneme_word_mapping
+
+        if return_word_mappings:
+            return (list2str(text) if text_type in six.string_types else str2list(text)), \
+                   text_word_to_phoneme_word_mapping
+
+        return list2str(text) if text_type in six.string_types else str2list(text)
+
 
     @abc.abstractmethod
-    def _phonemize_aux(self, text, separator, strip):
+    def _phonemize_aux(self, text, separator, strip, return_word_mappings):
         pass

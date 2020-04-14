@@ -112,7 +112,7 @@ class SegmentsBackend(BaseBackend):
         return segments.Profile(
             *[{'Grapheme': k, 'mapping': v} for k, v in g2p.items()])
 
-    def _phonemize_aux(self, text, separator, strip):
+    def _phonemize_aux(self, text, separator, strip, return_word_mappings):
         # tokenize the input text per utterance
         phonemized = (
             self.tokenizer(line, column='mapping', errors='strict')
@@ -131,5 +131,8 @@ class SegmentsBackend(BaseBackend):
         phonemized = (p.replace(' ', separator.phone) for p in phonemized)
         phonemized = (p.replace('#', separator.word) for p in phonemized)
 
+        if return_word_mappings:
+            return list(phonemized), []
+
         # return the result as a list of utterances
-        return list(phonemized), []
+        return list(phonemized)

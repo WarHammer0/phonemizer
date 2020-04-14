@@ -102,7 +102,7 @@ class FestivalBackend(BaseBackend):
     def supported_languages():
         return {'en-us': 'english-us'}
 
-    def _phonemize_aux(self, text, separator, strip):
+    def _phonemize_aux(self, text, separator, strip, return_word_mappings):
         """Return a phonemized version of `text` with festival
 
         This function is a wrapper on festival, a text to speech
@@ -125,7 +125,11 @@ class FestivalBackend(BaseBackend):
         b = self._process(a)
         c = self._postprocess(b, separator, strip)
 
-        return [line for line in c if line.strip() != ''], []
+        if return_word_mappings:
+            return [line for line in c if line.strip() != ''], []
+
+        return [line for line in c if line.strip() != '']
+
 
     @staticmethod
     def _double_quoted(line):

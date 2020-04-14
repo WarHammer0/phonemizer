@@ -37,7 +37,7 @@ _ESPEAK_FLAGS_RE = re.compile(r'\(.+?\)')
 # a global variable being used to overload the default espeak installed on the
 # system. The user can choose an alternative espeak with the method
 # EspeakBackend.set_espeak_path().
-_ESPEAK_DEFAULT_PATH = '/Users/tedi/resemble/espeak-ng/yolo/bin/espeak-ng'
+_ESPEAK_DEFAULT_PATH = None
 
 
 class EspeakBackend(BaseBackend):
